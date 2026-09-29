@@ -1,8 +1,8 @@
-﻿bin /
-obj /
-**/ bin /
-**/ obj /
-.vs /
+﻿bin/
+obj/
+**/bin/
+**/obj/
+.vs/
 *.user
 *.suo
 appsettings.Development.json
