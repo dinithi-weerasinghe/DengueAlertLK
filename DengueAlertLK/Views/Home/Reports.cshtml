@@ -1,0 +1,62 @@
+﻿@{
+    ViewData["Title"] = "Reports";
+}
+
+<div class="page-head">
+    <div><h1>Reports</h1><p>Summary of dengue cases by area for a selected period.</p></div>
+    <div class="range-box no-print">
+        <input type="date" id="r_from" class="form-control form-control-sm" />
+        <span>-</span>
+        <input type="date" id="r_to" class="form-control form-control-sm" />
+        <button class="btn btn-primary btn-sm" onclick="load()">Generate</button>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <b id="title">Dengue Report</b>
+        <div class="no-print">
+            <button class="btn btn-outline-secondary btn-sm" onclick="exportCsv()"><i class="bi bi-filetype-csv me-1"></i>Export CSV</button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-modern">
+            <thead><tr><th>Area</th><th>District</th><th class="text-end">Entries</th><th class="text-end">Cases</th><th class="text-end">Recovered</th><th>Risk Level</th></tr></thead>
+            <tbody id="tbody"></tbody>
+            <tfoot><tr class="fw-bold"><td colspan="3">Total</td><td class="text-end" id="tCases">0</td><td class="text-end" id="tRec">0</td><td></td></tr></tfoot>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let data = null;
+        const today = new Date();
+        $('r_to').value = isoDate(today);
+        $('r_from').value = isoDate(new Date(today.getTime() - 29 * 86400000));
+
+        async function load() {
+            data = await (await request(`/api/dashboard/report?start=${$('r_from').value}&end=${$('r_to').value}`)).json();
+            $('title').textContent = `Dengue Report: ${fmtDate(data.rangeStart)} to ${fmtDate(data.rangeEnd)}`;
+            $('tbody').innerHTML = data.rows.length ? data.rows.map(r => `
+                <tr><td class="fw-semibold">${esc(r.area)}</td><td>${esc(r.district)}</td><td class="text-end">${r.entries}</td>
+                <td class="text-end">${num(r.cases)}</td><td class="text-end">${num(r.recovered)}</td><td>${riskBadge(r.risk)}</td></tr>`).join('')
+                : `<tr><td colspan="6"><div class="empty">No data for this period</div></td></tr>`;
+            $('tCases').textContent = num(data.totalCases);
+            $('tRec').textContent = num(data.totalRecovered);
+        }
+
+        function exportCsv() {
+            if (!data || !data.rows.length) return toast('warning', 'Nothing to export');
+            const q = v => `"${String(v).replace(/"/g, '""')}"`;
+            const lines = [['Area', 'District', 'Entries', 'Cases', 'Recovered', 'Risk'].join(',')]
+                .concat(data.rows.map(r => [r.area, r.district, r.entries, r.cases, r.recovered, r.risk].map(q).join(',')));
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+            a.download = `dengue-report-${data.rangeStart}-to-${data.rangeEnd}.csv`;
+            a.click();
+        }
+        load();
+    </script>
+}

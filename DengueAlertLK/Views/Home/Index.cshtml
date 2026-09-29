@@ -1,0 +1,169 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="page-head">
+    <div><h1>Dashboard</h1><p>Overview of Dengue Cases</p></div>
+    <div class="range-box">
+        <i class="bi bi-calendar3"></i>
+        <input type="date" id="d_from" class="form-control form-control-sm" />
+        <span>-</span>
+        <input type="date" id="d_to" class="form-control form-control-sm" />
+        <button class="btn btn-primary btn-sm" onclick="load()">Apply</button>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat">
+            <div class="icon bg-purple"><i class="bi bi-people-fill"></i></div>
+            <div><div class="label">Total Cases</div><div class="value" id="stTotal">0</div><div class="chg" id="chTotal"></div></div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat">
+            <div class="icon bg-red"><i class="bi bi-bandaid-fill"></i></div>
+            <div><div class="label">New Cases (This Week)</div><div class="value" id="stWeek">0</div><div class="chg" id="chWeek"></div></div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat">
+            <div class="icon bg-orange"><i class="bi bi-activity"></i></div>
+            <div><div class="label">High Risk Areas</div><div class="value" id="stHigh">0</div><a href="/Home/RiskMap" class="chg text-danger text-decoration-none">View risk map</a></div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat">
+            <div class="icon bg-green"><i class="bi bi-shield-check"></i></div>
+            <div><div class="label">Recovered</div><div class="value" id="stRec">0</div><div class="chg" id="chRec"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="panel">
+            <div class="panel-head"><b>Dengue Cases Trend</b><span class="text-muted small">Weekly</span></div>
+            <div class="panel-body"><div style="height:280px"><canvas id="trendChart"></canvas></div></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="panel">
+            <div class="panel-head"><b>Cases by Area</b><span class="text-muted small">Top 6</span></div>
+            <div class="panel-body"><div style="height:280px"><canvas id="areaChart"></canvas></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-xl-4">
+        <div class="panel">
+            <div class="panel-head"><b>Recent Dengue Cases</b></div>
+            <div class="table-responsive">
+                <table class="table table-modern">
+                    <thead><tr><th>Date</th><th>Area</th><th>Cases</th><th>Risk</th></tr></thead>
+                    <tbody id="recent"></tbody>
+                </table>
+            </div>
+            <div class="text-center p-3"><a href="/Home/Cases" class="btn btn-primary btn-sm">View All Cases</a></div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="panel">
+            <div class="panel-head"><b>Cases by Risk Level</b></div>
+            <div class="panel-body">
+                <div class="row align-items-center">
+                    <div class="col-6"><div style="height:180px"><canvas id="riskChart"></canvas></div></div>
+                    <div class="col-6" id="riskLegend" style="font-size:.82rem"></div>
+                </div>
+                <div class="text-center mt-3 fw-semibold">Total: <span id="riskTotal">0</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="panel">
+            <div class="panel-head"><b>Risk Map (Heat Map)</b></div>
+            <div id="miniMap" style="height:270px"></div>
+        </div>
+    </div>
+</div>
+
+<div class="alert-banner">
+    <i class="bi bi-megaphone"></i>
+    <div class="flex-grow-1">
+        <div class="fw-bold">Stay Alert, Stay Safe!</div>
+        <div class="small">Dengue is preventable. Remove stagnant water, keep your surroundings clean and protect yourself and your family.</div>
+    </div>
+    <a href="/Home/Awareness" class="btn btn-primary">View Prevention Tips</a>
+</div>
+
+@section Scripts {
+    <script>
+        let trendChart, areaChart, riskChart;
+        const map = createMap('miniMap', false);
+        const group = L.layerGroup().addTo(map);
+
+        const today = new Date();
+        $('d_to').value = isoDate(today);
+        $('d_from').value = isoDate(new Date(today.getTime() - 29 * 86400000));
+
+        // goodWhenUp = true  -> increase is green (e.g. recovered)
+        function chg(p, goodWhenUp, label) {
+            const up = p >= 0, good = goodWhenUp ? up : !up;
+            return `<span class="${good ? 'up-good' : 'up-bad'}"><i class="bi bi-arrow-${up ? 'up' : 'down'}"></i> ${Math.abs(p)}% ${label}</span>`;
+        }
+
+        async function load() {
+            const qs = `start=${$('d_from').value}&end=${$('d_to').value}`;
+            const [s, m] = await Promise.all([
+                request('/api/dashboard/summary?' + qs).then(r => r.json()),
+                request('/api/dashboard/map?' + qs).then(r => r.json())
+            ]);
+
+            $('stTotal').textContent = num(s.total);
+            $('stWeek').textContent = num(s.newThisWeek);
+            $('stHigh').textContent = String(s.highRiskAreas).padStart(2, '0');
+            $('stRec').textContent = num(s.recovered);
+            $('chTotal').innerHTML = chg(s.totalChange, false, 'from previous period');
+            $('chWeek').innerHTML = chg(s.weekChange, false, 'from last week');
+            $('chRec').innerHTML = chg(s.recoveredChange, true, 'from previous period');
+
+            // Trend line chart
+            if (trendChart) trendChart.destroy();
+            trendChart = new Chart($('trendChart'), { type: 'line',
+                data: { labels: s.trend.labels, datasets: [
+                    { label: 'Selected period', data: s.trend.current, borderColor: '#0b8a72', backgroundColor: '#0b8a72', tension: .3, pointRadius: 4 },
+                    { label: 'Previous period', data: s.trend.previous, borderColor: '#9ca3af', backgroundColor: '#9ca3af', tension: .3, pointRadius: 4 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end' } },
+                           scales: { y: { beginAtZero: true, title: { display: true, text: 'Number of Cases' } } } } });
+
+            // Cases by area bar chart
+            if (areaChart) areaChart.destroy();
+            areaChart = new Chart($('areaChart'), { type: 'bar',
+                data: { labels: s.byArea.map(a => a.name), datasets: [{ data: s.byArea.map(a => a.cases),
+                    backgroundColor: ['#ef4444', '#f97316', '#fbbf24', '#16a34a', '#3b82f6', '#8b5cf6'], borderRadius: 4 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+                           scales: { y: { beginAtZero: true, title: { display: true, text: 'Number of Cases' } } } } });
+
+            // Risk donut
+            const rTotal = s.risk.reduce((a, r) => a + r.cases, 0);
+            if (riskChart) riskChart.destroy();
+            riskChart = new Chart($('riskChart'), { type: 'doughnut',
+                data: { labels: s.risk.map(r => r.level), datasets: [{ data: s.risk.map(r => r.cases), backgroundColor: ['#ef4444', '#f97316', '#16a34a'] }] },
+                options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } } });
+            $('riskTotal').textContent = num(rTotal);
+            const rng = { High: '>= 100', Medium: '50 - 99', Low: '< 50' };
+            $('riskLegend').innerHTML = s.risk.map(r => `
+                <div class="mb-2"><span class="risk risk-${r.level.toLowerCase()}" style="padding:.1em .5em">&nbsp;</span>
+                <b>${r.level}</b> (${rng[r.level]})<div class="text-muted ms-4">${num(r.cases)} (${rTotal ? Math.round(r.cases * 100 / rTotal) : 0}%) - ${r.areas} areas</div></div>`).join('');
+
+            // Recent cases
+            $('recent').innerHTML = s.recent.length ? s.recent.map(r => `
+                <tr><td>${fmtDate(r.date)}</td><td>${esc(r.area)}</td><td>${r.cases}</td><td>${riskBadge(r.risk)}</td></tr>`).join('')
+                : `<tr><td colspan="4"><div class="empty">No cases in this range</div></td></tr>`;
+
+            renderRiskLayers(map, group, m);
+        }
+        load();
+    </script>
+}

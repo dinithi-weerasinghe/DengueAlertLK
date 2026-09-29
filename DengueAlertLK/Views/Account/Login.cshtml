@@ -1,0 +1,90 @@
+﻿@{ Layout = null; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in - Dengue Alert LK</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        body { font-family:'Inter',system-ui,sans-serif; margin:0; }
+        .wrap { min-height:100vh; display:flex; }
+        .brand-panel { flex:1.1; color:#fff; padding:64px; display:flex; flex-direction:column; justify-content:center;
+                       background:linear-gradient(135deg,#0a3b4a 0%,#0b8a72 100%); position:relative; overflow:hidden; }
+        .brand-panel::after { content:""; position:absolute; width:420px; height:420px; border-radius:50%; background:rgba(255,255,255,.07); right:-120px; bottom:-120px; }
+        .logo { width:72px; height:72px; border-radius:50%; border:3px solid #fff; display:grid; place-items:center; font-size:2.2rem; margin-bottom:24px; }
+        .brand-panel h1 { font-weight:700; font-size:2.2rem; }
+        .brand-panel p { color:#c9e6e0; max-width:430px; }
+        .feature { display:flex; align-items:center; gap:12px; margin-top:16px; color:#e2f3ef; }
+        .feature i { width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.15); display:grid; place-items:center; }
+        .form-panel { flex:1; display:flex; align-items:center; justify-content:center; padding:32px; background:#f8fafc; }
+        .form-box { width:100%; max-width:390px; }
+        .form-control { border-radius:10px; padding:.7rem .9rem; border-color:#cbd5e1; }
+        .form-control:focus { border-color:#0b8a72; box-shadow:0 0 0 .2rem rgba(11,138,114,.15); }
+        .input-group .form-control { border-right:0; }
+        .input-group .btn { border:1px solid #cbd5e1; border-left:0; border-radius:0 10px 10px 0; background:#fff; color:#64748b; }
+        .btn-login { background:#0b8a72; border:0; border-radius:10px; padding:.75rem; font-weight:600; color:#fff; }
+        .btn-login:hover { background:#087360; color:#fff; }
+        @@media (max-width: 900px) { .brand-panel { display:none; } }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <section class="brand-panel">
+       <div class="logo"><i class="fa-solid fa-mosquito"></i></div>
+        <h1>Dengue Alert LK</h1>
+        <p>Dengue Outbreak Monitoring &amp; Prediction System for Sri Lanka.</p>
+        <div class="feature"><i class="bi bi-graph-up-arrow"></i> Track dengue cases in real time</div>
+        <div class="feature"><i class="bi bi-map"></i> View risk areas on the heat map</div>
+        <div class="feature"><i class="bi bi-shield-check"></i> Prevention and awareness</div>
+    </section>
+
+    <section class="form-panel">
+        <div class="form-box">
+            <h2 class="fw-bold mb-1">Welcome back</h2>
+            <p class="text-muted mb-4">Sign in to your account to continue.</p>
+            <div id="err" class="alert alert-danger py-2 d-none"></div>
+            <div class="mb-3">
+                <label class="form-label fw-medium">Username</label>
+                <input id="username" class="form-control" placeholder="Enter your username" autofocus />
+            </div>
+            <div class="mb-4">
+                <label class="form-label fw-medium">Password</label>
+                <div class="input-group">
+                    <input id="password" type="password" class="form-control" placeholder="Enter your password" />
+                    <button class="btn" type="button" onclick="togglePwd()"><i id="eye" class="bi bi-eye"></i></button>
+                </div>
+            </div>
+            <button id="btn" class="btn btn-login w-100" onclick="login()">Sign in</button>
+        </div>
+    </section>
+</div>
+<script>
+    const $ = id => document.getElementById(id);
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    function togglePwd() {
+        const p = $('password'), show = p.type === 'password';
+        p.type = show ? 'text' : 'password';
+        $('eye').className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+    }
+    async function login() {
+        const err = $('err'), btn = $('btn');
+        err.classList.add('d-none');
+        if (!$('username').value.trim() || !$('password').value) {
+            err.textContent = 'Please enter your username and password.'; err.classList.remove('d-none'); return;
+        }
+        btn.disabled = true; btn.textContent = 'Signing in...';
+        try {
+            const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: $('username').value.trim(), password: $('password').value }) });
+            if (r.ok) { location.href = '/'; return; }
+            const e = await r.json().catch(() => ({}));
+            err.textContent = e.message || 'Sign in failed.'; err.classList.remove('d-none');
+        } finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+    }
+</script>
+</body>
+</html>

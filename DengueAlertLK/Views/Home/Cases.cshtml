@@ -1,0 +1,123 @@
+﻿@{
+    ViewData["Title"] = "Cases";
+}
+
+<div class="page-head">
+    <div><h1>Dengue Cases</h1><p>Add, view and manage reported dengue cases.</p></div>
+    <button class="btn btn-primary" onclick="openModal()"><i class="bi bi-plus-circle me-1"></i> Add Dengue Case</button>
+</div>
+
+<div class="panel">
+    <div class="panel-head filters">
+        <div class="search">
+            <i class="bi bi-search"></i>
+            <input id="f_search" class="form-control" placeholder="Search area or notes..." oninput="debounce()" />
+        </div>
+        <select id="f_area" class="form-select" style="width:180px" onchange="load()"></select>
+        <input type="date" id="f_from" class="form-control" style="width:155px" onchange="load()" />
+        <input type="date" id="f_to" class="form-control" style="width:155px" onchange="load()" />
+        <button class="btn btn-light" onclick="clearFilters()">Clear</button>
+        <span class="text-muted small ms-auto" id="countLabel"></span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-modern">
+            <thead><tr><th>Date</th><th>Area</th><th class="text-end">Cases</th><th class="text-end">Recovered</th><th>Risk Level</th><th>Notes</th><th class="text-end">Actions</th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="caseModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="mTitle">Add Dengue Case</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="m_id" />
+                <div class="row g-3">
+                    <div class="col-md-7"><label class="form-label">Area</label><select id="m_area" class="form-select"></select></div>
+                    <div class="col-md-5"><label class="form-label">Report Date</label><input id="m_date" type="date" class="form-control" /></div>
+                    <div class="col-md-6"><label class="form-label">Number of Cases</label><input id="m_cases" type="number" min="1" class="form-control" placeholder="0" /></div>
+                    <div class="col-md-6"><label class="form-label">Recovered</label><input id="m_rec" type="number" min="0" class="form-control" placeholder="0" /></div>
+                    <div class="col-12"><label class="form-label">Notes <span class="text-muted">(optional)</span></label><textarea id="m_notes" class="form-control" rows="2"></textarea></div>
+                </div>
+                <div id="formErr" class="alert alert-danger mt-3 mb-0 py-2 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Case</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API = '/api/cases';
+        const modal = new bootstrap.Modal($('caseModal'));
+        let areas = [], rows = [], timer;
+
+        async function init() {
+            areas = await (await request('/api/areas')).json();
+            $('f_area').innerHTML = '<option value="">All areas</option>' + areas.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+            $('m_area').innerHTML = areas.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+            await load();
+            if (new URLSearchParams(location.search).has('add')) openModal();
+        }
+        function debounce() { clearTimeout(timer); timer = setTimeout(load, 350); }
+        function clearFilters() { $('f_search').value = ''; $('f_area').value = ''; $('f_from').value = ''; $('f_to').value = ''; load(); }
+
+        async function load() {
+            const q = new URLSearchParams({ search: $('f_search').value, areaId: $('f_area').value, start: $('f_from').value, end: $('f_to').value });
+            rows = await (await request(API + '?' + q)).json();
+            $('countLabel').textContent = `${rows.length} records`;
+            $('tbody').innerHTML = rows.length ? rows.map(r => `
+                <tr><td>${fmtDate(r.date)}</td><td class="fw-semibold">${esc(r.areaName)}</td>
+                <td class="text-end">${r.cases}</td><td class="text-end">${r.recovered}</td><td>${riskBadge(r.risk)}</td>
+                <td class="text-muted small">${esc(r.notes)}</td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-icon btn-outline-primary" title="Edit" onclick="openModal(${r.id})"><i class="bi bi-pencil-square"></i></button>
+                    <button class="btn btn-icon btn-outline-danger" title="Delete" onclick="del(${r.id})"><i class="bi bi-trash3"></i></button>
+                </td></tr>`).join('')
+                : `<tr><td colspan="7"><div class="empty"><i class="bi bi-inbox"></i>No cases found</div></td></tr>`;
+        }
+
+        function openModal(id) {
+            const r = id ? rows.find(x => x.id === id) : null;
+            $('mTitle').textContent = r ? 'Edit Dengue Case' : 'Add Dengue Case';
+            $('m_id').value = r?.id ?? '';
+            $('m_area').value = r?.areaId ?? areas[0]?.id ?? '';
+            $('m_date').max = isoDate(new Date());
+            $('m_date').value = r?.date ?? isoDate(new Date());
+            $('m_cases').value = r?.cases ?? ''; $('m_rec').value = r?.recovered ?? 0; $('m_notes').value = r?.notes ?? '';
+            $('formErr').classList.add('d-none');
+            modal.show();
+        }
+        function showErr(m) { $('formErr').textContent = m; $('formErr').classList.remove('d-none'); }
+
+        async function save() {
+            $('formErr').classList.add('d-none');
+            const body = { areaId: +$('m_area').value, reportDate: $('m_date').value, cases: +$('m_cases').value,
+                           recovered: +$('m_rec').value, notes: $('m_notes').value.trim() };
+            if (!body.areaId) return showErr('Please add an area first.');
+            if (!body.reportDate) return showErr('Report date is required.');
+            if (!Number.isInteger(body.cases) || body.cases < 1) return showErr('Number of cases must be at least 1.');
+            if (!Number.isInteger(body.recovered) || body.recovered < 0) return showErr('Recovered must be 0 or more.');
+
+            const id = $('m_id').value, btn = $('saveBtn');
+            btn.disabled = true;
+            try {
+                const r = await request(id ? `${API}/${id}` : API, jsonOpts(id ? 'PUT' : 'POST', body));
+                if (!r.ok) return showErr(errText(await r.json().catch(() => ({}))));
+                modal.hide(); toast('success', id ? 'Case updated' : 'Case added'); load();
+            } finally { btn.disabled = false; }
+        }
+
+        async function del(id) {
+            if (!await confirmDelete('Delete this record?', 'This case record will be permanently removed.')) return;
+            const r = await request(`${API}/${id}`, { method: 'DELETE' });
+            if (!r.ok) return toast('error', errText(await r.json().catch(() => ({}))));
+            toast('success', 'Case deleted'); load();
+        }
+        init();
+    </script>
+}

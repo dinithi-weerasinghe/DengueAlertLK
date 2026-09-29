@@ -1,0 +1,53 @@
+﻿@{
+    ViewData["Title"] = "Settings";
+}
+
+<div class="page-head">
+    <div><h1>Settings</h1><p>Your account and password.</p></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="panel">
+            <div class="panel-body">
+                <h5 class="fw-bold mb-3">Profile</h5>
+                <div class="text-muted small">Full name</div><div class="fw-semibold mb-2">@User.FindFirst("FullName")?.Value</div>
+                <div class="text-muted small">Username</div><div class="fw-semibold mb-2">@User.Identity?.Name</div>
+                <div class="text-muted small">Role</div><div class="fw-semibold">@(User.IsInRole("Admin") ? "Admin" : "Officer")</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="panel">
+            <div class="panel-body">
+                <h5 class="fw-bold mb-3">Change password</h5>
+                <div class="mb-3"><label class="form-label">Current password</label><input id="p_cur" type="password" class="form-control" /></div>
+                <div class="mb-3"><label class="form-label">New password</label><input id="p_new" type="password" class="form-control" placeholder="At least 6 characters" /></div>
+                <div class="mb-3"><label class="form-label">Confirm new password</label><input id="p_conf" type="password" class="form-control" /></div>
+                <div id="formErr" class="alert alert-danger py-2 d-none"></div>
+                <button id="saveBtn" class="btn btn-primary" onclick="save()">Update password</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function showErr(m) { $('formErr').textContent = m; $('formErr').classList.remove('d-none'); }
+        async function save() {
+            $('formErr').classList.add('d-none');
+            if (!$('p_cur').value) return showErr('Enter your current password.');
+            if ($('p_new').value.length < 6) return showErr('New password must be at least 6 characters.');
+            if ($('p_new').value !== $('p_conf').value) return showErr('New password and confirmation do not match.');
+
+            const btn = $('saveBtn'); btn.disabled = true;
+            try {
+                const r = await request('/api/auth/change-password', jsonOpts('POST', { currentPassword: $('p_cur').value, newPassword: $('p_new').value }));
+                if (!r.ok) return showErr(errText(await r.json().catch(() => ({}))));
+                ['p_cur', 'p_new', 'p_conf'].forEach(i => $(i).value = '');
+                toast('success', 'Password updated');
+            } finally { btn.disabled = false; }
+        }
+    </script>
+}

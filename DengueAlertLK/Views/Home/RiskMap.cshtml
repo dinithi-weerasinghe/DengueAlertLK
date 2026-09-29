@@ -1,0 +1,53 @@
+﻿@{
+    ViewData["Title"] = "Risk Map";
+}
+
+<div class="page-head">
+    <div><h1>Risk Map</h1><p>Dengue heat map and risk level of each area.</p></div>
+    <div class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0">Period</label>
+        <select id="days" class="form-select" style="width:170px" onchange="load()">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+        </select>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="panel">
+            <div id="bigMap" style="height:560px"></div>
+            <div class="p-3 d-flex gap-4 flex-wrap small">
+                <span><span class="risk risk-high">High</span> &ge; 100 cases</span>
+                <span><span class="risk risk-medium">Medium</span> 50 - 99 cases</span>
+                <span><span class="risk risk-low">Low</span> below 50 cases</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="panel">
+            <div class="panel-head"><b>Areas by Cases</b></div>
+            <div class="list-scroll"><table class="table table-modern"><tbody id="areaList"></tbody></table></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const map = createMap('bigMap', true);
+        const group = L.layerGroup().addTo(map);
+
+        async function load() {
+            const days = +$('days').value, today = new Date();
+            const qs = `start=${isoDate(new Date(today.getTime() - (days - 1) * 86400000))}&end=${isoDate(today)}`;
+            const data = await (await request('/api/dashboard/map?' + qs)).json();
+            renderRiskLayers(map, group, data);
+            $('areaList').innerHTML = data.map(d => `
+                <tr style="cursor:pointer" onclick="map.setView([${d.lat},${d.lng}], 10)">
+                <td><b>${esc(d.name)}</b><div class="text-muted small">${esc(d.district)}</div></td>
+                <td class="text-end fw-semibold">${d.cases}</td><td class="text-end">${riskBadge(d.risk)}</td></tr>`).join('');
+        }
+        load();
+    </script>
+}

@@ -1,0 +1,97 @@
+﻿@{
+    ViewData["Title"] = "Areas";
+}
+
+<div class="page-head">
+    <div><h1>Areas</h1><p>Manage the areas used for case reporting and the risk map.</p></div>
+    <button class="btn btn-primary" onclick="openModal()"><i class="bi bi-plus-lg me-1"></i> Add Area</button>
+</div>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table class="table table-modern">
+            <thead><tr><th>Area</th><th>District</th><th>Latitude</th><th>Longitude</th><th class="text-end">Population</th><th class="text-end">Total Cases</th><th class="text-end">Actions</th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="areaModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="mTitle">Add Area</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="m_id" />
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Area Name</label><input id="m_name" class="form-control" /></div>
+                    <div class="col-md-6"><label class="form-label">District</label><input id="m_district" class="form-control" /></div>
+                    <div class="col-md-6"><label class="form-label">Latitude</label><input id="m_lat" type="number" step="0.0001" class="form-control" placeholder="e.g. 6.9271" /></div>
+                    <div class="col-md-6"><label class="form-label">Longitude</label><input id="m_lng" type="number" step="0.0001" class="form-control" placeholder="e.g. 79.8612" /></div>
+                    <div class="col-12"><label class="form-label">Population</label><input id="m_pop" type="number" min="0" class="form-control" /></div>
+                </div>
+                <div id="formErr" class="alert alert-danger mt-3 mb-0 py-2 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Area</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const API = '/api/areas';
+        const modal = new bootstrap.Modal($('areaModal'));
+        let rows = [];
+
+        async function load() {
+            rows = await (await request(API)).json();
+            $('tbody').innerHTML = rows.length ? rows.map(a => `
+                <tr><td class="fw-semibold">${esc(a.name)}</td><td>${esc(a.district)}</td>
+                <td>${a.latitude}</td><td>${a.longitude}</td><td class="text-end">${num(a.population)}</td>
+                <td class="text-end fw-semibold">${num(a.totalCases)}</td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-icon btn-outline-primary" title="Edit" onclick="openModal(${a.id})"><i class="bi bi-pencil-square"></i></button>
+                    <button class="btn btn-icon btn-outline-danger" title="Delete" onclick="del(${a.id})"><i class="bi bi-trash3"></i></button>
+                </td></tr>`).join('')
+                : `<tr><td colspan="7"><div class="empty"><i class="bi bi-geo-alt"></i>No areas yet</div></td></tr>`;
+        }
+
+        function openModal(id) {
+            const a = id ? rows.find(x => x.id === id) : null;
+            $('mTitle').textContent = a ? 'Edit Area' : 'Add Area';
+            $('m_id').value = a?.id ?? ''; $('m_name').value = a?.name ?? ''; $('m_district').value = a?.district ?? '';
+            $('m_lat').value = a?.latitude ?? ''; $('m_lng').value = a?.longitude ?? ''; $('m_pop').value = a?.population ?? 0;
+            $('formErr').classList.add('d-none');
+            modal.show();
+        }
+        function showErr(m) { $('formErr').textContent = m; $('formErr').classList.remove('d-none'); }
+
+        async function save() {
+            $('formErr').classList.add('d-none');
+            const body = { name: $('m_name').value.trim(), district: $('m_district').value.trim(),
+                           latitude: parseFloat($('m_lat').value), longitude: parseFloat($('m_lng').value), population: +$('m_pop').value };
+            if (!body.name || !body.district) return showErr('Area name and district are required.');
+            if (isNaN(body.latitude) || body.latitude < 5.5 || body.latitude > 10) return showErr('Latitude must be between 5.5 and 10.0 (Sri Lanka).');
+            if (isNaN(body.longitude) || body.longitude < 79 || body.longitude > 82.5) return showErr('Longitude must be between 79.0 and 82.5 (Sri Lanka).');
+
+            const id = $('m_id').value, btn = $('saveBtn');
+            btn.disabled = true;
+            try {
+                const r = await request(id ? `${API}/${id}` : API, jsonOpts(id ? 'PUT' : 'POST', body));
+                if (!r.ok) return showErr(errText(await r.json().catch(() => ({}))));
+                modal.hide(); toast('success', id ? 'Area updated' : 'Area added'); load();
+            } finally { btn.disabled = false; }
+        }
+
+        async function del(id) {
+            const a = rows.find(x => x.id === id);
+            if (!await confirmDelete('Delete this area?', `"${a.name}" will be permanently removed.`)) return;
+            const r = await request(`${API}/${id}`, { method: 'DELETE' });
+            if (!r.ok) return toast('error', errText(await r.json().catch(() => ({}))));
+            toast('success', 'Area deleted'); load();
+        }
+        load();
+    </script>
+}
